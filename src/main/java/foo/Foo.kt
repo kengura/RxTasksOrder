@@ -13,29 +13,29 @@ object Foo {
 
     @JvmStatic
     fun main(args: Array<String>) {
-        val dispatcher = RxTasksChainDispatcher()
-        val count = 100
+        val dispatcher = SequentialDispatcher(Schedulers.single())
+        val count = 50
 
         val resultList = Collections.synchronizedList(ArrayList<Int>())
         val latch = CountDownLatch(count)
 
         for (i in 0..count) {
             when (i % 2) {
-                0 -> Single.timer(Random.nextLong(0, 100), TimeUnit.MILLISECONDS)
+                0 -> Single.timer(Random.nextLong(0, 200), TimeUnit.MILLISECONDS)
                     .map { i }
-                    .observeChain(dispatcher)
+                    .executeSequentially(dispatcher)
                     .subscribe({
+                                   println(it)
                                    resultList.add(it)
                                    latch.countDown()
                                }, {})
                 1 -> Single.fromCallable {
-                    Thread.sleep(Random.nextLong(0, 100))
+                    Thread.sleep(Random.nextLong(0, 200))
                     return@fromCallable i
                 }
-                    .subscribeOn(Schedulers.io())
-                    .observeOn(Schedulers.computation())
-                    .observeChain(dispatcher)
+                    .executeSequentially(dispatcher, Schedulers.io())
                     .subscribe({
+                                   println(it)
                                    resultList.add(it)
                                    latch.countDown()
                                }, {})
@@ -44,10 +44,11 @@ object Foo {
 
         latch.await()
 
-        if ((0..count).toList() == resultList) {
-            println("Passed")
-        } else {
-            throw RuntimeException("Failed")
+        (0 until count).forEach {
+            if (resultList[it] != it) {
+                throw RuntimeException("Failed")
+            }
         }
+        println("Passed")
     }
 }
